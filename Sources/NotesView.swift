@@ -5,6 +5,7 @@ struct NotesView: View {
     @State private var selectedNote: NoteItem?
     @State private var editingTitle = ""
     @State private var editingContent = ""
+    @State private var showCopied = false
 
     var body: some View {
         if let note = selectedNote {
@@ -88,6 +89,21 @@ struct NotesView: View {
 
                 Spacer()
 
+                // Copy note
+                Button {
+                    let full = (editingTitle.isEmpty ? "" : editingTitle + "\n\n") + editingContent
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(full, forType: .string)
+                    showCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { showCopied = false }
+                } label: {
+                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 12))
+                        .foregroundColor(showCopied ? .green : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy note")
+
                 Button {
                     store.deleteNote(note)
                     selectedNote = nil
@@ -146,6 +162,7 @@ struct NoteRow: View {
     @ObservedObject var store: AppStore
     let onTap: () -> Void
     @State private var isHovering = false
+    @State private var rowCopied = false
 
     var body: some View {
         Button(action: onTap) {
@@ -165,6 +182,25 @@ struct NoteRow: View {
                 Spacer()
 
                 if isHovering {
+                    // Copy button
+                    Button {
+                        let full = (note.title.isEmpty ? "" : note.title + "\n\n") + note.content
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(full, forType: .string)
+                        rowCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { rowCopied = false }
+                    } label: {
+                        Image(systemName: rowCopied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(rowCopied ? .green : .secondary)
+                            .frame(width: 20, height: 20)
+                            .background(Color(nsColor: .controlBackgroundColor))
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+
+                    // Delete button
                     Button {
                         withAnimation(.easeOut(duration: 0.2)) {
                             store.deleteNote(note)
