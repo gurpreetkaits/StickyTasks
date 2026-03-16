@@ -4,7 +4,7 @@ struct NotesView: View {
     @ObservedObject var store: AppStore
     @State private var selectedNote: NoteItem?
     @State private var editingTitle = ""
-    @State private var blocks: [Block] = []
+    @State private var editingContent = ""
 
     var body: some View {
         if let note = selectedNote {
@@ -20,7 +20,7 @@ struct NotesView: View {
                 let note = store.addNote()
                 selectedNote = note
                 editingTitle = note.title
-                blocks = parseMarkdown(note.content)
+                editingContent = note.content
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "plus.circle.fill")
@@ -59,7 +59,7 @@ struct NotesView: View {
                             NoteRow(note: note, store: store) {
                                 selectedNote = note
                                 editingTitle = note.title
-                                blocks = parseMarkdown(note.content)
+                                editingContent = note.content
                             }
                         }
                     }
@@ -71,11 +71,9 @@ struct NotesView: View {
 
     func noteEditor(note: NoteItem) -> some View {
         VStack(spacing: 0) {
-            // Toolbar
             HStack {
                 Button {
-                    let content = serializeBlocks(blocks)
-                    store.updateNote(note, title: editingTitle, content: content)
+                    store.updateNote(note, title: editingTitle, content: editingContent)
                     selectedNote = nil
                 } label: {
                     HStack(spacing: 4) {
@@ -90,20 +88,7 @@ struct NotesView: View {
 
                 Spacer()
 
-                // Block type shortcuts
-                HStack(spacing: 2) {
-                    blockTypeButton("H1", icon: "textformat.size.larger", type: .heading1)
-                    blockTypeButton("H2", icon: "textformat.size", type: .heading2)
-                    blockTypeButton("H3", icon: "textformat.size.smaller", type: .heading3)
-                    blockTypeButton(nil, icon: "checkmark.square", type: .checkbox)
-                    blockTypeButton("T", icon: "textformat", type: .text)
-                }
-
-                Spacer()
-
                 Button {
-                    let content = serializeBlocks(blocks)
-                    store.updateNote(note, content: content)
                     store.deleteNote(note)
                     selectedNote = nil
                 } label: {
@@ -124,68 +109,28 @@ struct NotesView: View {
                 .font(.system(size: 20, weight: .bold))
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
-                .padding(.bottom, 2)
+                .padding(.bottom, 8)
                 .onChange(of: editingTitle) { _, newValue in
                     store.updateNote(note, title: newValue)
                 }
 
-            // Hint
-            Text("Type # for headings, [] for checkbox")
-                .font(.system(size: 10))
-                .foregroundColor(.secondary.opacity(0.5))
-                .padding(.horizontal, 16)
-                .padding(.bottom, 6)
-
-            // Block editor
-            BlockEditor(blocks: $blocks) {
-                let content = serializeBlocks(blocks)
-                store.updateNote(note, content: content)
+            // Markdown editor
+            MarkdownTextEditor(text: $editingContent) {
+                store.updateNote(note, content: editingContent)
             }
 
-            // Footer
-            HStack {
+            // Footer hints
+            HStack(spacing: 12) {
                 Text(formatDate(note.updatedAt))
-                    .font(.system(size: 11))
+                    .font(.system(size: 10))
                     .foregroundColor(.secondary)
                 Spacer()
-                Text("\(blocks.count) block\(blocks.count == 1 ? "" : "s")")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary.opacity(0.6))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-                    )
+                Text("⇧↵ checkbox")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(.secondary.opacity(0.5))
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 10)
-        }
-    }
-
-    func blockTypeButton(_ label: String?, icon: String, type: BlockType) -> some View {
-        Button {
-            appendBlock(type: type)
-        } label: {
-            Image(systemName: icon)
-                .font(.system(size: 10))
-                .foregroundColor(.secondary)
-                .frame(width: 22, height: 22)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.4))
-                )
-        }
-        .buttonStyle(.plain)
-        .help(type == .checkbox ? "Add checkbox" : "Add \(label ?? "text")")
-    }
-
-    func appendBlock(type: BlockType) {
-        let block = Block(type: type)
-        blocks.append(block)
-        let content = serializeBlocks(blocks)
-        if let note = selectedNote {
-            store.updateNote(note, content: content)
+            .padding(.vertical, 6)
         }
     }
 
@@ -195,8 +140,6 @@ struct NotesView: View {
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
-
-// MARK: - Note Row
 
 struct NoteRow: View {
     let note: NoteItem
@@ -256,7 +199,6 @@ struct NoteRow: View {
 
     var previewText: String {
         if note.content.isEmpty { return "No content" }
-        // Strip markdown prefixes for preview
         let cleaned = note.content
             .components(separatedBy: "\n")
             .first?
