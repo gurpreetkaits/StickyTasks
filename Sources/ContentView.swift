@@ -43,6 +43,8 @@ struct ContentView: View {
                     TasksView(store: store)
                 case .notes:
                     NotesView(store: store)
+                case .ideas:
+                    IdeasView(store: store)
                 case .focus:
                     FocusTimerView(store: store)
                 }
@@ -60,6 +62,10 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
                 } else if store.currentTab == .notes {
                     Text("\(store.notes.count) note\(store.notes.count == 1 ? "" : "s")")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                } else if store.currentTab == .ideas {
+                    Text("\(store.ideas.count) idea\(store.ideas.count == 1 ? "" : "s")")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 } else if store.isFocusing {
@@ -96,13 +102,13 @@ struct ContentView: View {
             }
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: tab == .tasks ? "checkmark.square" : tab == .notes ? "note.text" : "timer")
+                Image(systemName: tabIcon(tab))
                     .font(.system(size: 11))
                 Text(tab.rawValue)
                     .font(.system(size: 12, weight: .medium))
             }
             .foregroundColor(store.currentTab == tab ? .primary : .secondary)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 8)
             .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 8)
@@ -110,6 +116,15 @@ struct ContentView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    func tabIcon(_ tab: Tab) -> String {
+        switch tab {
+        case .tasks: return "checkmark.square"
+        case .notes: return "note.text"
+        case .ideas: return "lightbulb"
+        case .focus: return "timer"
+        }
     }
 
     func formatDuration(_ interval: TimeInterval) -> String {

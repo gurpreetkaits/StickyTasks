@@ -4,6 +4,7 @@ import SwiftUI
 class AppStore: ObservableObject {
     @Published var tasks: [TaskItem] = []
     @Published var notes: [NoteItem] = []
+    @Published var ideas: [IdeaItem] = []
     @Published var currentTab: Tab = .tasks
     @Published var isPinned: Bool = false
 
@@ -23,11 +24,26 @@ class AppStore: ObservableObject {
         load()
     }
 
-    // MARK: - Persistence
+    // MARK: - Persistence (JSON in App Support)
 
     private var storageURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let dir = appSupport.appendingPathComponent("StickyTasks", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    // MARK: - Markdown backup directory (~/StickyTasks/)
+
+    private var mdBaseURL: URL {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let dir = home.appendingPathComponent("StickyTasks", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private func mdDir(_ name: String) -> URL {
+        let dir = mdBaseURL.appendingPathComponent(name, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -46,6 +62,11 @@ class AppStore: ObservableObject {
             notes = decoded
         }
 
+        if let data = try? Data(contentsOf: storageURL.appendingPathComponent("ideas.json")),
+           let decoded = try? decoder.decode([IdeaItem].self, from: data) {
+            ideas = decoded
+        }
+
         if let data = try? Data(contentsOf: storageURL.appendingPathComponent("sessions.json")),
            let decoded = try? decoder.decode([FocusSession].self, from: data) {
             focusSessions = decoded
@@ -62,9 +83,83 @@ class AppStore: ObservableObject {
         if let data = try? encoder.encode(notes) {
             try? data.write(to: storageURL.appendingPathComponent("notes.json"))
         }
+        if let data = try? encoder.encode(ideas) {
+            try? data.write(to: storageURL.appendingPathComponent("ideas.json"))
+        }
         if let data = try? encoder.encode(focusSessions) {
             try? data.write(to: storageURL.appendingPathComponent("sessions.json"))
         }
+
+        // Sync markdown backups
+        syncMarkdownFiles()
+    }
+
+    // MARK: - Markdown Sync
+
+    private func syncMarkdownFiles() {
+        // ~/StickyTasks/Tasks/tasks.md
+        let tasksDir = mdDir("Tasks")
+        var tasksMd = "# Tasks\n\n"
+        if !pendingTasks.isEmpty {
+            tasksMd += "## Pending\n\n"
+            for t in pendingTasks {
+                tasksMd += "- [ ] \(t.title)\n"
+            }
+            tasksMd += "\n"
+        }
+        if !completedTasks.isEmpty {
+            tasksMd += "## Completed\n\n"
+            for t in completedTasks {
+                let dateStr = formatDateShort(t.completedAt ?? t.createdAt)
+                tasksMd += "- [x] \(t.title) _(completed \(dateStr))_\n"
+            }
+            tasksMd += "\n"
+        }
+        try? tasksMd.write(to: tasksDir.appendingPathComponent("tasks.md"), atomically: true, encoding: .utf8)
+
+        // ~/StickyTasks/Notes/<title>.md per note
+        let notesDir = mdDir("Notes")
+        // Clear old notes
+        if let files = try? FileManager.default.contentsOfDirectory(at: notesDir, includingPropertiesForKeys: nil) {
+            for file in files where file.pathExtension == "md" {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+        for note in notes {
+            let fileName = sanitizeFilename(note.title.isEmpty ? "Untitled" : note.title, id: note.id)
+            var content = "# \(note.title.isEmpty ? "Untitled" : note.title)\n\n"
+            content += note.content
+            content += "\n\n---\n_Created: \(formatDateShort(note.createdAt)) | Updated: \(formatDateShort(note.updatedAt))_\n"
+            try? content.write(to: notesDir.appendingPathComponent("\(fileName).md"), atomically: true, encoding: .utf8)
+        }
+
+        // ~/StickyTasks/Ideas/ideas.md
+        let ideasDir = mdDir("Ideas")
+        var ideasMd = "# Ideas\n\n"
+        for idea in ideas {
+            let dateStr = formatDateShort(idea.createdAt)
+            ideasMd += "- \(idea.title) _(\(dateStr))_\n"
+        }
+        if ideas.isEmpty {
+            ideasMd += "_No ideas yet._\n"
+        }
+        try? ideasMd.write(to: ideasDir.appendingPathComponent("ideas.md"), atomically: true, encoding: .utf8)
+    }
+
+    private func sanitizeFilename(_ name: String, id: UUID) -> String {
+        let cleaned = name
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: "\\", with: "-")
+            .prefix(50)
+        let shortID = id.uuidString.prefix(6)
+        return "\(cleaned)_\(shortID)"
+    }
+
+    private func formatDateShort(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: date)
     }
 
     // MARK: - Pin
@@ -128,6 +223,19 @@ class AppStore: ObservableObject {
 
     func deleteNote(_ note: NoteItem) {
         notes.removeAll { $0.id == note.id }
+        save()
+    }
+
+    // MARK: - Ideas
+
+    func addIdea(_ title: String) {
+        guard !title.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        ideas.insert(IdeaItem(title: title), at: 0)
+        save()
+    }
+
+    func deleteIdea(_ idea: IdeaItem) {
+        ideas.removeAll { $0.id == idea.id }
         save()
     }
 
