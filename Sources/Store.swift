@@ -14,8 +14,10 @@ class AppStore: ObservableObject {
     @Published var currentSession: FocusSession?
     private var focusTimer: Timer?
 
-    // Pin callback
+    // Callbacks
     var onPinChanged: ((Bool) -> Void)?
+    var onFocusChanged: ((Bool) -> Void)?
+    var onOpenApp: (() -> Void)?
 
     init() {
         load()
@@ -142,6 +144,7 @@ class AppStore: ObservableObject {
                 self?.focusElapsed += 1
             }
         }
+        onFocusChanged?(true)
     }
 
     func stopFocus() {
@@ -156,6 +159,7 @@ class AppStore: ObservableObject {
             currentSession = nil
             save()
         }
+        onFocusChanged?(false)
     }
 
     func clearSessions() {

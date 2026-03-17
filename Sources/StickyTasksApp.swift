@@ -16,13 +16,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var statusItem: NSStatusItem!
     var popover: NSPopover!
     var store: AppStore!
+    var focusBarManager = FocusBarManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
         store = AppStore()
+
         store.onPinChanged = { [weak self] pinned in
             self?.popover.behavior = pinned ? .applicationDefined : .transient
+        }
+
+        store.onFocusChanged = { [weak self] focusing in
+            guard let self = self else { return }
+            if focusing {
+                self.focusBarManager.show(store: self.store)
+            } else {
+                self.focusBarManager.hide()
+            }
+        }
+
+        store.onOpenApp = { [weak self] in
+            self?.openPopover()
         }
 
         popover = NSPopover()
@@ -38,6 +53,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             button.image = NSImage(systemSymbolName: "checklist", accessibilityDescription: "StickyTasks")
             button.action = #selector(togglePopover)
             button.target = self
+        }
+    }
+
+    func openPopover() {
+        guard let button = statusItem.button else { return }
+        if !popover.isShown {
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 
